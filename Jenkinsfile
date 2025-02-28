@@ -1,57 +1,65 @@
 pipeline {
     agent any
+
     environment {
-        GIT_CREDENTIALS = 'github-credentials'
-        DOCKER_CONTAINER_NAME = 'doc-leap-container'
         DOCKER_IMAGE_NAME = 'doc-leap-app'
-        TOMCAT_PORT = '8090'   // Change this if needed
-        CONTAINER_PORT = '8095' // Use a different port to avoid conflicts
+        DOCKER_CONTAINER_NAME = 'doc-leap-container'
+        CONTAINER_PORT = '8095'
     }
+
     stages {
-        stage('Checkout SCM') {
+        stage('Start') {
             steps {
-                git branch: 'main', credentialsId: "${GIT_CREDENTIALS}", url: 'https://github.com/naveenkumars175/Doc-leap-year.git'
+                echo 'Starting Pipeline...'
             }
         }
+
+        stage('Checkout SCM') {
+            steps {
+                git branch: 'main', credentialsId: 'github-credentials', url: 'https://github.com/naveenkumars175/Doc-leap-year.git'
+            }
+        }
+
         stage('Build WAR') {
             steps {
                 sh '''
                     mkdir -p WEB-INF/classes
-                    if find src -name "*.java" | grep -q .; then
-                        find src -name "*.java" | xargs javac -cp /usr/share/tomcat9/lib/servlet-api.jar -d WEB-INF/classes
-                    fi
-                    jar -cvf Doc-Leap-app.war *
+                    find src -name "*.java" | grep -q . && javac -d WEB-INF/classes $(find src -name "*.java")
+                    jar -cvf Doc-Leap-app.war Doc-Leap-app.war Dockerfile Jenkinsfile WEB-INF build src
                 '''
             }
         }
+
         stage('Deploy to Tomcat') {
             steps {
                 sh 'sudo cp Doc-Leap-app.war /var/lib/tomcat9/webapps/'
             }
         }
+
         stage('Restart Tomcat') {
             steps {
                 sh 'sudo systemctl restart tomcat9'
             }
         }
+
         stage('Docker Containerization') {
             steps {
-                sh '''
-                    # Using standard docker build command (without buildx)
-                    docker build -t ${DOCKER_IMAGE_NAME} .
-                '''
+                sh 'docker build -t ${DOCKER_IMAGE_NAME} .'
             }
         }
+
         stage('Docker Deployment') {
             steps {
                 sh '''
-                    # Stop and remove the existing container if it exists
-                    if [ $(docker ps -q -f name=${DOCKER_CONTAINER_NAME}) ]; then
-                        docker stop ${DOCKER_CONTAINER_NAME}
-                        docker rm ${DOCKER_CONTAINER_NAME}
+                    # Check if the container exists
+                    if [ "$(docker ps -aq -f name=${DOCKER_CONTAINER_NAME})" ]; then
+                        echo "Stopping and removing existing container..."
+                        docker stop ${DOCKER_CONTAINER_NAME} || true
+                        docker rm ${DOCKER_CONTAINER_NAME} || true
                     fi
-                    
-                    # Run the container on the specified port
+
+                    # Run a new container
+                    echo "Starting new Docker container..."
                     docker run -d -p ${CONTAINER_PORT}:8080 --name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE_NAME}
                 '''
             }
