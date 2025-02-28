@@ -23,16 +23,17 @@ pipeline {
         stage('Build WAR') {
             steps {
                 sh '''
+                    mkdir -p target
                     mkdir -p WEB-INF/classes
                     find src -name "*.java" | grep -q . && javac -d WEB-INF/classes $(find src -name "*.java")
-                    jar -cvf Doc-Leap-app.war Doc-Leap-app.war Dockerfile Jenkinsfile WEB-INF build src
+                    jar -cvf target/Doc-Leap-app.war -C src/main/webapp .
                 '''
             }
         }
 
         stage('Deploy to Tomcat') {
             steps {
-                sh 'sudo cp Doc-Leap-app.war /var/lib/tomcat9/webapps/'
+                sh 'sudo cp target/Doc-Leap-app.war /var/lib/tomcat9/webapps/'
             }
         }
 
@@ -44,7 +45,10 @@ pipeline {
 
         stage('Docker Containerization') {
             steps {
-                sh 'docker build -t ${DOCKER_IMAGE_NAME} .'
+                sh '''
+                    echo "Building Docker image using legacy builder..."
+                    docker build --no-cache -t ${DOCKER_IMAGE_NAME} .
+                '''
             }
         }
 
