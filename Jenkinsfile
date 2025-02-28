@@ -2,6 +2,10 @@ pipeline {
     agent any
     environment {
         GIT_CREDENTIALS = 'github-credentials'
+        DOCKER_CONTAINER_NAME = 'doc-leap-container'
+        DOCKER_IMAGE_NAME = 'doc-leap-app'
+        TOMCAT_PORT = '8090'   // Change this if needed
+        CONTAINER_PORT = '8095' // Use a different port to avoid conflicts
     }
     stages {
         stage('Checkout SCM') {
@@ -32,15 +36,20 @@ pipeline {
         }
         stage('Docker Containerization') {
             steps {
-                sh 'docker build -t doc-leap-app .'
+                sh 'docker build -t ${DOCKER_IMAGE_NAME} .'
             }
         }
         stage('Docker Deployment') {
             steps {
                 sh '''
-                    docker stop doc-leap-container || true
-                    docker rm doc-leap-container || true
-                    docker run -d -p 8090:8080 --name doc-leap-container doc-leap-app
+                    # Check if the container is running and stop/remove it
+                    if [ $(docker ps -q -f name=${DOCKER_CONTAINER_NAME}) ]; then
+                        docker stop ${DOCKER_CONTAINER_NAME}
+                        docker rm ${DOCKER_CONTAINER_NAME}
+                    fi
+                    
+                    # Run the container on a different port to avoid conflicts
+                    docker run -d -p ${CONTAINER_PORT}:8080 --name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE_NAME}
                 '''
             }
         }
