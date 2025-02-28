@@ -20,7 +20,7 @@ pipeline {
                     if find src -name "*.java" | grep -q .; then
                         find src -name "*.java" | xargs javac -cp /usr/share/tomcat9/lib/servlet-api.jar -d WEB-INF/classes
                     fi
-                    jar -cvf Doc-Leap-app.war *
+                    jar -cvf Doc-Leap-app.war WEB-INF src/main/webapp
                 '''
             }
         }
@@ -36,22 +36,29 @@ pipeline {
         }
         stage('Docker Containerization') {
             steps {
-                sh 'docker build -t ${DOCKER_IMAGE_NAME} .'
+                sh 'docker build --progress=plain -t ${DOCKER_IMAGE_NAME} .'
             }
         }
         stage('Docker Deployment') {
             steps {
                 sh '''
-                    # Check if the container is running and stop/remove it
-                    if [ $(docker ps -q -f name=${DOCKER_CONTAINER_NAME}) ]; then
-                        docker stop ${DOCKER_CONTAINER_NAME}
-                        docker rm ${DOCKER_CONTAINER_NAME}
+                    # Check if the container exists (running or stopped)
+                    if [ "$(docker ps -aq -f name=${DOCKER_CONTAINER_NAME})" ]; then
+                        docker rm -f ${DOCKER_CONTAINER_NAME}
                     fi
                     
                     # Run the container on a different port to avoid conflicts
                     docker run -d -p ${CONTAINER_PORT}:8080 --name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE_NAME}
                 '''
             }
+        }
+    }
+    post {
+        success {
+            echo 'Pipeline executed successfully!'
+        }
+        failure {
+            echo 'Pipeline execution failed!'
         }
     }
 }
