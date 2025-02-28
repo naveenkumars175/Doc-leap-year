@@ -1,26 +1,45 @@
 pipeline {
     agent any
+    environment {
+        GIT_CREDENTIALS = 'github-credentials'
+    }
     stages {
-        stage('Clone Repository') {
+        stage('Checkout SCM') {
             steps {
-                git branch: 'main', credentialsId: 'github-credentials', url: 'https://github.com/naveenkumars175/button-click-app.git'
+                git branch: 'main', credentialsId: "${GIT_CREDENTIALS}", url: 'https://github.com/naveenkumars175/Doc-leap-year.git'
             }
         }
         stage('Build WAR') {
             steps {
-                sh 'mkdir -p build'
-                sh 'jar -cvf build/button-click-app.war -C src/main/webapp .'
+                sh '''
+                    mkdir -p WEB-INF/classes
+                    find src -name "*.java" | xargs javac -cp /usr/share/tomcat9/lib/servlet-api.jar -d WEB-INF/classes
+                    jar -cvf Doc-Leap-app.war *
+                '''
             }
         }
         stage('Deploy to Tomcat') {
             steps {
-                sh 'sudo mv build/button-click-app.war /home/naveenkumar/tomcat9/webapps/'
+                sh 'sudo cp Doc-Leap-app.war /var/lib/tomcat9/webapps/'
             }
         }
         stage('Restart Tomcat') {
             steps {
-                sh 'sudo /home/naveenkumar/tomcat9/bin/shutdown.sh || true'
-                sh 'sudo /home/naveenkumar/tomcat9/bin/startup.sh'
+                sh 'sudo systemctl restart tomcat9'
+            }
+        }
+        stage('Docker Containerization') {
+            steps {
+                sh 'docker build -t doc-leap-app .'
+            }
+        }
+        stage('Docker Deployment') {
+            steps {
+                sh '''
+                    docker stop doc-leap-container || true
+                    docker rm doc-leap-container || true
+                    docker run -d -p 8090:8080 --name doc-leap-container doc-leap-app
+                '''
             }
         }
     }
